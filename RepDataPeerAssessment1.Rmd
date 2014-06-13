@@ -1,0 +1,131 @@
+Reproducible Research Peer Assessment 1
+========================================================
+
+## Introduction
+
+```{r echo=FALSE}
+opts_chunk$set(echo=TRUE)
+```
+
+The following is a demonstration of some simple analyses than can be conducted on an person's personal fitness data.  Using the raw data for number of steps taken each day over two months by a single anonymous individual, we can answer questions such as:
+
+* How many steps does this person take in an average day?
+* What does an average day look like for this person, in terms of steps taken?  Which times of day are the most and least active?
+* Are there differences in activity patterns between weekdays and weekends?
+
+The data can be downloaded at [Activity Monitoring Data](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip)
+
+## Loading and preprocessing the data
+
+Before any analysis can be done on the fitness data, a few steps must be taken to load the data and transform it into a suitable format.
+
+Loading the data - in order to complete this step, the [Activity Monitoring Data](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip) csv must already be in the working directory.
+```{r}
+stepsdata <- read.csv("./activity.csv", header=TRUE)
+head(stepsdata)
+```
+
+The "Date" column into a variable of the type "date" for ease in charting weekends against weekdays.
+```{r}
+stepsdata$date <- as.Date(as.character(stepsdata$date), format="%m/%d/%y")
+```
+
+## What is the mean total number of steps taken per day?
+
+Steps per day were totalled and saved as a separate data frame.  A histogram of this data shows that the individual took between 10000 and 15000 steps on most days.
+
+```{r}
+steps_by_day <- with(stepsdata, split(steps, date))
+steps_per_day <- sapply(steps_by_day, sum)
+steps_per_day
+```
+
+```{r, fig.width=6, fig.height=6}
+hist(steps_per_day, main="Histogram of Steps Per Day", xlab="Steps Per Day")
+```
+
+Mean and median can be calculated from this data frame, and, as expected, they both fall within the 10000-15000 range.
+
+```{r}
+mean(steps_per_day, na.rm=TRUE)
+median(steps_per_day, na.rm=TRUE)
+```
+
+## What is the average daily activity pattern?
+
+A separate data frame was created with the 5 minute intervals in one column and the mean number of steps for that interval across all days in another.  NA values were ignored.
+
+```{r}
+library(plyr)
+stepsdatanotNA <- stepsdata[!is.na(stepsdata$steps),]
+intervalmeans <- ddply(stepsdatanotNA,.(interval), summarize, mean=mean(steps))
+head(intervalmeans)
+```
+
+A time series plot shows the times of most and least activity.
+```{r fig.width=6, fig.height=6}
+plot(intervalmeans$interval, intervalmeans$mean, type="l", main="Average Daily Activity Pattern", xlab="Interval", ylab="Mean number of steps")
+```
+
+The time of most activity appears to be between 5:00 and 10:00 AM.  Using the max() function, we can see that it is 8:35 AM.
+```{r}
+intervalmeans[which.max(intervalmeans$mean),]
+```
+
+## Imputing missing values
+
+As shown earlier, several values in the "steps" column are missing.  To calculate the number of missing values, the following code was used:
+```{r}
+sum(is.na(stepsdata$steps))
+```
+
+These missing values could make the full data set difficult to analyze.  So, I decided to replace each missing value with the average value for that 5-minute interval.  The days with missing data will be made to look like the average day shown in the previous time series plot.
+```{r}
+for (obs in 1:nrow(stepsdata)) {
+  if (is.na(stepsdata[obs,1])){
+    if (obs%%288 == 0){
+      stepsdata[obs,1] <-intervalmeans$mean[288]
+    }
+    else {
+      stepsdata[obs,1] <- intervalmeans$mean[obs%%288]
+    }
+  }
+}
+```
+
+This data should not change the overall pattern of days much, except to move the median closer to the mean as more days are more days are being created with the mean number of steps.  The histogram should also reflect this with more days in the center column of the graph.
+
+```{r}
+steps_by_day <- with(stepsdata, split(steps, date))
+steps_per_day <- sapply(steps_by_day, sum)
+steps_per_day
+```
+
+```{r, fig.width=6, fig.height=6}
+hist(steps_per_day, main="Histogram of Steps Per Day", xlab="Steps Per Day")
+```
+
+```{r}
+mean(steps_per_day, na.rm=TRUE)
+median(steps_per_day, na.rm=TRUE)
+```
+
+Replacing NA values in this way moves the median up one to 10766, which is also the mean value.
+
+## Are there differences in activity patterns between weekdays and weekends?
+
+In order to answer this question, a factor variable must be created with two levels -- "weekday" and "weekend":
+
+```{r}
+stepsdata$dayofweek <- weekdays(stepsdata$date)
+stepsdata$dayofweek <- ifelse(stepsdata$dayofweek=="Saturday"|stepsdata$dayofweek=="Sunday","weekend","weekday")
+```
+
+This data was then put into a two-panel lattice plot.
+
+```{r, fig.height=6, fig.width=9}
+library(lattice)
+xyplot(steps~interval|dayofweek, data=stepsdata, layout=c(1,2),type="l")
+```
+
+In this graph, it appears the individual is taking more steps during the weekday and is starting his or her day a few hours earlier on the weekday.
